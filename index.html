@@ -22,19 +22,34 @@
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{height:100%;}
+  html{overflow:hidden;}
   body{
     margin:0; background:var(--bg); color:var(--text);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     display:flex; flex-direction:column;
-    min-height:100dvh;
+    height:var(--app-h, 100dvh);
+    overflow:hidden;
     padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     overscroll-behavior:none;
   }
   header{
     display:flex; align-items:center; justify-content:space-between;
-    padding:14px 18px 4px;
+    padding:10px 18px 2px; flex:none;
   }
   header h1{font-size:15px; font-weight:600; margin:0; color:var(--muted); letter-spacing:.02em;}
+  /* Cuando el teclado achica el viewport visible, se compacta todo para que
+     nunca haga falta desplazarse: se pierde lo decorativo, no lo funcional. */
+  body.kb-open header h1{ display:none; }
+  body.kb-open header{ padding:4px 18px 0; }
+  body.kb-open .tabs{ padding:0 14px 4px; }
+  body.kb-open .tab{ padding:6px 8px; font-size:11.5px; }
+  body.kb-open .field{ padding:8px 16px; border-radius:16px; }
+  body.kb-open input.amount{ font-size: clamp(22px, 8vw, 34px); }
+  body.kb-open .name{ display:none; }
+  body.kb-open .swapWrap{ margin:-2px 0; }
+  body.kb-open #swapBtn{ width:30px; height:30px; }
+  body.kb-open footer{ padding:2px 18px calc(4px + env(safe-area-inset-bottom)); }
+  body.kb-open .status{ font-size:11px; }
   #refreshBtn{
     background:none; border:none; color:var(--muted); font-size:20px; padding:6px 10px;
     cursor:pointer; border-radius:10px; line-height:1;
@@ -304,8 +319,8 @@
     recompute("to");
   });
 
-  clearFrom.addEventListener("click", function(){ amountFrom.value=""; amountTo.value=""; clearFrom.hidden=true; clearTo.hidden=true; saveVals(); amountFrom.focus(); });
-  clearTo.addEventListener("click", function(){ amountFrom.value=""; amountTo.value=""; clearFrom.hidden=true; clearTo.hidden=true; saveVals(); amountTo.focus(); });
+  clearFrom.addEventListener("click", function(){ amountFrom.value=""; amountTo.value=""; clearFrom.hidden=true; clearTo.hidden=true; saveVals(); amountFrom.focus({preventScroll:true}); });
+  clearTo.addEventListener("click", function(){ amountFrom.value=""; amountTo.value=""; clearFrom.hidden=true; clearTo.hidden=true; saveVals(); amountTo.focus({preventScroll:true}); });
 
   swapBtn.addEventListener("click", function(){
     var main = document.querySelector("main");
@@ -314,7 +329,9 @@
     } else {
       main.insertBefore(fieldFrom, fieldTo);
     }
-    (state.lastEdited === "from" ? amountFrom : amountTo).focus();
+    // preventScroll es clave: sin esto Safari centra el input en el viewport
+    // visible y "empuja" la página hacia abajo cada vez que tocás el botón.
+    (state.lastEdited === "from" ? amountFrom : amountTo).focus({preventScroll:true});
   });
 
   // ---------- tabs ----------
@@ -424,6 +441,27 @@
     window.addEventListener("load", function(){
       navigator.serviceWorker.register("./sw.js").catch(function(){});
     });
+  }
+
+  // ---------- alto real de la pantalla (teclado incluido) ----------
+  // 100dvh no siempre se achica cuando aparece el teclado en iOS/Safari
+  // standalone, así que el contenido puede terminar más alto que lo visible
+  // y forzar scroll. Acá se fija el alto real de la ventana visible (la que
+  // queda arriba del teclado) y se activa un modo compacto cuando se reduce
+  // bastante, para que todo siga entrando sin desplazarse.
+  function setAppHeight(){
+    var vv = window.visualViewport;
+    var h = vv ? vv.height : window.innerHeight;
+    document.documentElement.style.setProperty("--app-h", h + "px");
+    var shrunk = (window.innerHeight - h) > 90; // heurística: teclado probablemente abierto
+    document.body.classList.toggle("kb-open", shrunk);
+  }
+  setAppHeight();
+  window.addEventListener("resize", setAppHeight);
+  window.addEventListener("orientationchange", setAppHeight);
+  if(window.visualViewport){
+    window.visualViewport.addEventListener("resize", setAppHeight);
+    window.visualViewport.addEventListener("scroll", setAppHeight);
   }
 })();
 </script>

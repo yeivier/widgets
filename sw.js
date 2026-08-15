@@ -2,7 +2,7 @@
 // Las tasas de cambio se manejan (y cachean) directamente en index.html vía localStorage,
 // así que las peticiones al API de cambio nunca pasan por acá (siempre van a red).
 
-var CACHE = "convclp-shell-v2";
+var CACHE = "convclp-shell-v3";
 var SHELL = ["./", "./index.html", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", function(event){
