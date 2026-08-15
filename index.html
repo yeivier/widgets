@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>R$ ⇄ CLP</title>
+<meta name="description" content="Conversor rápido de Reales brasileños a Pesos chilenos y viceversa, con tasa en vivo.">
+<meta name="theme-color" content="#0b1220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="R$⇄$">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon.svg">
+<style>
+  :root{
+    --bg:#0b1220; --card:#121b2e; --card2:#0f1729; --text:#eef2f8; --muted:#8b96ab;
+    --accent:#22c55e; --accent2:#14b8a6; --line:#1e293f; --danger:#f87171;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f4f6fb; --card:#ffffff; --card2:#eef1f8; --text:#101625; --muted:#5b6478; --line:#e1e6f0; }
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex; flex-direction:column;
+    min-height:100dvh;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overscroll-behavior:none;
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 18px 4px;
+  }
+  header h1{font-size:15px; font-weight:600; margin:0; color:var(--muted); letter-spacing:.02em;}
+  #refreshBtn{
+    background:none; border:none; color:var(--muted); font-size:20px; padding:6px 10px;
+    cursor:pointer; border-radius:10px; line-height:1;
+  }
+  #refreshBtn:active{background:var(--card2);}
+  #refreshBtn.spin svg{animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  main{flex:1; display:flex; flex-direction:column; padding:6px 14px 10px; gap:10px;}
+  .field{
+    background:var(--card); border:1px solid var(--line); border-radius:20px;
+    padding:14px 18px; flex:1; display:flex; flex-direction:column; justify-content:center;
+    min-height:0;
+  }
+  .field .row{display:flex; align-items:center; gap:10px;}
+  .flag{font-size:26px; line-height:1;}
+  .label{display:flex; flex-direction:column; margin-right:2px;}
+  .code{font-size:13px; font-weight:700; letter-spacing:.06em; color:var(--muted);}
+  .name{font-size:11px; color:var(--muted); opacity:.8;}
+  input.amount{
+    flex:1; min-width:0; background:transparent; border:none; outline:none; text-align:right;
+    color:var(--text); font-size:clamp(30px, 11vw, 56px); font-weight:700; font-variant-numeric:tabular-nums;
+    caret-color:var(--accent);
+  }
+  input.amount::placeholder{color:var(--muted); opacity:.5;}
+  .clearBtn{
+    background:var(--card2); border:none; color:var(--muted); width:26px; height:26px; border-radius:50%;
+    font-size:14px; display:flex; align-items:center; justify-content:center; flex:none; cursor:pointer;
+  }
+  .clearBtn[hidden]{display:none;}
+  .swapWrap{display:flex; align-items:center; justify-content:center; margin:-4px 0;}
+  #swapBtn{
+    background:var(--card2); border:1px solid var(--line); color:var(--accent2);
+    width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; z-index:1;
+  }
+  #swapBtn:active{transform:scale(.92);}
+  footer{padding:8px 18px calc(14px + env(safe-area-inset-bottom));}
+  .status{
+    display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--muted);
+    justify-content:center; text-align:center;
+  }
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--accent); flex:none;}
+  .dot.stale{background:#eab308;}
+  .dot.off{background:var(--danger);}
+  #statusText b{color:var(--text); font-weight:600;}
+</style>
+</head>
+<body>
+  <header>
+    <h1>Conversor en vivo</h1>
+    <button id="refreshBtn" aria-label="Actualizar tasa" title="Actualizar tasa">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <div class="field" id="fieldBRL">
+      <div class="row">
+        <span class="flag">🇧🇷</span>
+        <div class="label"><span class="code">BRL</span><span class="name">Real brasileño</span></div>
+        <input class="amount" id="brl" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Monto en reales">
+        <button class="clearBtn" id="clearBRL" hidden aria-label="Limpiar">✕</button>
+      </div>
+    </div>
+
+    <div class="swapWrap">
+      <button id="swapBtn" aria-label="Intercambiar" title="Intercambiar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+      </button>
+    </div>
+
+    <div class="field" id="fieldCLP">
+      <div class="row">
+        <span class="flag">🇨🇱</span>
+        <div class="label"><span class="code">CLP</span><span class="name">Peso chileno</span></div>
+        <input class="amount" id="clp" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Monto en pesos chilenos">
+        <button class="clearBtn" id="clearCLP" hidden aria-label="Limpiar">✕</button>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="status">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">Cargando tasa…</span>
+    </div>
+  </footer>
+
+<script>
+(function(){
+  "use strict";
+
+  var LS_RATE = "brlclp_rate_v1";     // {rate, ts}  rate = 1 BRL en CLP
+  var LS_VALS = "brlclp_vals_v1";     // {brl, clp}
+  var FRESH_MS = 6 * 60 * 60 * 1000;  // considerar "fresca" hasta 6h
+  var STALE_MS = 30 * 24 * 60 * 60 * 1000; // 30 días máx para seguir mostrando algo
+
+  var brlInput = document.getElementById("brl");
+  var clpInput = document.getElementById("clp");
+  var clearBRL = document.getElementById("clearBRL");
+  var clearCLP = document.getElementById("clearCLP");
+  var swapBtn = document.getElementById("swapBtn");
+  var refreshBtn = document.getElementById("refreshBtn");
+  var dot = document.getElementById("dot");
+  var statusText = document.getElementById("statusText");
+  var fieldBRL = document.getElementById("fieldBRL");
+  var fieldCLP = document.getElementById("fieldCLP");
+
+  var state = { rate: null, ts: null, syncing: false, lastEdited: "brl" };
+
+  // ---------- utils ----------
+  function parseNum(str){
+    if(!str) return NaN;
+    var s = String(str).trim().replace(/\./g, "").replace(",", ".");
+    // if user typed with a dot as decimal (e.g. from a keyboard that only has ".")
+    if (/^\d+\.\d{1,2}$/.test(String(str).trim()) && String(str).indexOf(",") === -1) {
+      s = String(str).trim();
+    }
+    var n = parseFloat(s);
+    return n;
+  }
+  function fmt(n, decimals){
+    if(!isFinite(n)) return "";
+    return n.toLocaleString("es-CL", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  }
+  function saveVals(){
+    try{ localStorage.setItem(LS_VALS, JSON.stringify({brl: brlInput.value, clp: clpInput.value})); }catch(e){}
+  }
+  function loadVals(){
+    try{
+      var v = JSON.parse(localStorage.getItem(LS_VALS) || "null");
+      return v || null;
+    }catch(e){ return null; }
+  }
+  function saveRate(rate, ts){
+    try{ localStorage.setItem(LS_RATE, JSON.stringify({rate: rate, ts: ts})); }catch(e){}
+  }
+  function loadRate(){
+    try{ return JSON.parse(localStorage.getItem(LS_RATE) || "null"); }catch(e){ return null; }
+  }
+  function relTime(ts){
+    var diff = Date.now() - ts;
+    var min = Math.round(diff / 60000);
+    if (min < 1) return "recién";
+    if (min < 60) return "hace " + min + " min";
+    var h = Math.round(min / 60);
+    if (h < 24) return "hace " + h + " h";
+    var d = Math.round(h / 24);
+    return "hace " + d + " d";
+  }
+
+  // ---------- conversion ----------
+  function recompute(source){
+    if(!state.rate) return;
+    state.syncing = true;
+    if(source === "brl"){
+      var b = parseNum(brlInput.value);
+      clpInput.value = isFinite(b) && brlInput.value !== "" ? fmt(b * state.rate, 0) : "";
+    } else {
+      var c = parseNum(clpInput.value);
+      brlInput.value = isFinite(c) && clpInput.value !== "" ? fmt(c / state.rate, 2) : "";
+    }
+    state.syncing = false;
+    clearBRL.hidden = !brlInput.value;
+    clearCLP.hidden = !clpInput.value;
+    saveVals();
+  }
+
+  brlInput.addEventListener("input", function(){
+    if(state.syncing) return;
+    state.lastEdited = "brl";
+    recompute("brl");
+  });
+  clpInput.addEventListener("input", function(){
+    if(state.syncing) return;
+    state.lastEdited = "clp";
+    recompute("clp");
+  });
+
+  clearBRL.addEventListener("click", function(){ brlInput.value=""; clpInput.value=""; clearBRL.hidden=true; clearCLP.hidden=true; saveVals(); brlInput.focus(); });
+  clearCLP.addEventListener("click", function(){ brlInput.value=""; clpInput.value=""; clearBRL.hidden=true; clearCLP.hidden=true; saveVals(); clpInput.focus(); });
+
+  swapBtn.addEventListener("click", function(){
+    var main = document.querySelector("main");
+    if (fieldBRL.compareDocumentPosition(fieldCLP) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      main.insertBefore(fieldCLP, fieldBRL);
+    } else {
+      main.insertBefore(fieldBRL, fieldCLP);
+    }
+    (state.lastEdited === "brl" ? brlInput : clpInput).focus();
+  });
+
+  // ---------- status UI ----------
+  function updateStatus(){
+    if(!state.rate){
+      dot.className = "dot off";
+      statusText.textContent = navigator.onLine ? "Sin datos de tasa todavía…" : "Sin conexión y sin datos guardados";
+      return;
+    }
+    var age = Date.now() - state.ts;
+    dot.className = "dot" + (age > FRESH_MS ? " stale" : "");
+    if (!navigator.onLine) dot.className = "dot off";
+    statusText.innerHTML = "1 BRL = <b>" + fmt(state.rate, 2) + "</b> CLP · " + relTime(state.ts) + (navigator.onLine ? "" : " · sin conexión");
+  }
+  setInterval(updateStatus, 30000);
+
+  // ---------- fetching ----------
+  function fetchWithTimeout(url, ms){
+    var ctrl = new AbortController();
+    var t = setTimeout(function(){ ctrl.abort(); }, ms);
+    return fetch(url, { signal: ctrl.signal, cache: "no-store" }).finally(function(){ clearTimeout(t); });
+  }
+
+  function tryEndpoints(){
+    // 1) open.er-api.com — sin key, actualizado ~cada 24h
+    return fetchWithTimeout("https://open.er-api.com/v6/latest/BRL", 5000)
+      .then(function(r){ if(!r.ok) throw new Error("bad status"); return r.json(); })
+      .then(function(j){
+        if(j && j.rates && typeof j.rates.CLP === "number") return j.rates.CLP;
+        throw new Error("no CLP");
+      })
+      .catch(function(){
+        // 2) fawazahmed0/currency-api (jsDelivr), actualizado a diario
+        return fetchWithTimeout("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/brl.json", 5000)
+          .then(function(r){ if(!r.ok) throw new Error("bad status"); return r.json(); })
+          .then(function(j){
+            if(j && j.brl && typeof j.brl.clp === "number") return j.brl.clp;
+            throw new Error("no clp");
+          });
+      })
+      .catch(function(){
+        // 3) mismo dataset, mirror en pages.dev (por si jsDelivr falla)
+        return fetchWithTimeout("https://latest.currency-api.pages.dev/v1/currencies/brl.json", 5000)
+          .then(function(r){ if(!r.ok) throw new Error("bad status"); return r.json(); })
+          .then(function(j){
+            if(j && j.brl && typeof j.brl.clp === "number") return j.brl.clp;
+            throw new Error("no clp");
+          });
+      });
+  }
+
+  function refreshRate(showSpin){
+    if(showSpin) refreshBtn.classList.add("spin");
+    return tryEndpoints()
+      .then(function(rate){
+        var ts = Date.now();
+        state.rate = rate;
+        state.ts = ts;
+        saveRate(rate, ts);
+        recompute(state.lastEdited);
+        updateStatus();
+      })
+      .catch(function(){
+        // se mantiene la tasa cacheada si existe; si no hay nada, avisamos
+        updateStatus();
+      })
+      .finally(function(){
+        if(showSpin) refreshBtn.classList.remove("spin");
+      });
+  }
+
+  refreshBtn.addEventListener("click", function(){ refreshRate(true); });
+  window.addEventListener("online", function(){ refreshRate(false); updateStatus(); });
+  window.addEventListener("offline", updateStatus);
+
+  // ---------- boot ----------
+  (function boot(){
+    var cached = loadRate();
+    if(cached && cached.rate && (Date.now() - cached.ts) < STALE_MS){
+      state.rate = cached.rate;
+      state.ts = cached.ts;
+    }
+    var vals = loadVals();
+    if(vals){
+      brlInput.value = vals.brl || "";
+      clpInput.value = vals.clp || "";
+      clearBRL.hidden = !brlInput.value;
+      clearCLP.hidden = !clpInput.value;
+    }
+    updateStatus();
+    brlInput.focus({preventScroll:true});
+    if(brlInput.value) brlInput.select();
+    // siempre intenta traer la tasa más fresca en background, sin bloquear la UI
+    refreshRate(false);
+  })();
+
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("./sw.js").catch(function(){});
+    });
+  }
+})();
+</script>
+</body>
+</html>
