@@ -1,7 +1,7 @@
 {
-  "name": "BRL ⇄ CLP",
-  "short_name": "R$⇄$",
-  "description": "Conversor rápido de Reales brasileños a Pesos chilenos y viceversa",
+  "name": "Conversor CLP",
+  "short_name": "Conv $",
+  "description": "Conversor rápido de Reales, Dólares y USDT a Pesos chilenos y viceversa",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
