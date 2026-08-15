@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>R$ ⇄ CLP</title>
-<meta name="description" content="Conversor rápido de Reales brasileños a Pesos chilenos y viceversa, con tasa en vivo.">
+<title>Conversor CLP</title>
+<meta name="description" content="Conversor rápido de Reales, Dólares y USDT a Pesos chilenos y viceversa, con tasas en vivo.">
 <meta name="theme-color" content="#0b1220">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="R$⇄$">
+<meta name="apple-mobile-web-app-title" content="Conv $">
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./icon.svg">
@@ -42,6 +42,18 @@
   #refreshBtn:active{background:var(--card2);}
   #refreshBtn.spin svg{animation:spin .8s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
+
+  .tabs{
+    display:flex; gap:6px; padding:2px 14px 8px; overflow-x:auto; scrollbar-width:none;
+  }
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{
+    flex:1; min-width:0; white-space:nowrap; text-align:center;
+    background:var(--card2); border:1px solid var(--line); color:var(--muted);
+    font-size:13px; font-weight:600; padding:9px 10px; border-radius:12px; cursor:pointer;
+  }
+  .tab.active{ background:var(--accent2); border-color:var(--accent2); color:#04211c; }
+
   main{flex:1; display:flex; flex-direction:column; padding:6px 14px 10px; gap:10px;}
   .field{
     background:var(--card); border:1px solid var(--line); border-radius:20px;
@@ -49,13 +61,13 @@
     min-height:0;
   }
   .field .row{display:flex; align-items:center; gap:10px;}
-  .flag{font-size:26px; line-height:1;}
-  .label{display:flex; flex-direction:column; margin-right:2px;}
+  .flag{font-size:26px; line-height:1; width:32px; text-align:center; flex:none;}
+  .label{display:flex; flex-direction:column; margin-right:2px; min-width:0;}
   .code{font-size:13px; font-weight:700; letter-spacing:.06em; color:var(--muted);}
-  .name{font-size:11px; color:var(--muted); opacity:.8;}
+  .name{font-size:11px; color:var(--muted); opacity:.8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   input.amount{
     flex:1; min-width:0; background:transparent; border:none; outline:none; text-align:right;
-    color:var(--text); font-size:clamp(30px, 11vw, 56px); font-weight:700; font-variant-numeric:tabular-nums;
+    color:var(--text); font-size:clamp(28px, 10vw, 52px); font-weight:700; font-variant-numeric:tabular-nums;
     caret-color:var(--accent);
   }
   input.amount::placeholder{color:var(--muted); opacity:.5;}
@@ -90,13 +102,15 @@
     </button>
   </header>
 
+  <nav class="tabs" id="tabs"></nav>
+
   <main>
-    <div class="field" id="fieldBRL">
+    <div class="field" id="fieldFrom">
       <div class="row">
-        <span class="flag">🇧🇷</span>
-        <div class="label"><span class="code">BRL</span><span class="name">Real brasileño</span></div>
-        <input class="amount" id="brl" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Monto en reales">
-        <button class="clearBtn" id="clearBRL" hidden aria-label="Limpiar">✕</button>
+        <span class="flag" id="flagFrom"></span>
+        <div class="label"><span class="code" id="codeFrom"></span><span class="name" id="nameFrom"></span></div>
+        <input class="amount" id="amountFrom" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Monto origen">
+        <button class="clearBtn" id="clearFrom" hidden aria-label="Limpiar">✕</button>
       </div>
     </div>
 
@@ -106,12 +120,12 @@
       </button>
     </div>
 
-    <div class="field" id="fieldCLP">
+    <div class="field" id="fieldTo">
       <div class="row">
-        <span class="flag">🇨🇱</span>
-        <div class="label"><span class="code">CLP</span><span class="name">Peso chileno</span></div>
-        <input class="amount" id="clp" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Monto en pesos chilenos">
-        <button class="clearBtn" id="clearCLP" hidden aria-label="Limpiar">✕</button>
+        <span class="flag" id="flagTo"></span>
+        <div class="label"><span class="code" id="codeTo"></span><span class="name" id="nameTo"></span></div>
+        <input class="amount" id="amountTo" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Monto destino">
+        <button class="clearBtn" id="clearTo" hidden aria-label="Limpiar">✕</button>
       </div>
     </div>
   </main>
@@ -127,53 +141,128 @@
 (function(){
   "use strict";
 
-  var LS_RATE = "brlclp_rate_v1";     // {rate, ts}  rate = 1 BRL en CLP
-  var LS_VALS = "brlclp_vals_v1";     // {brl, clp}
-  var FRESH_MS = 6 * 60 * 60 * 1000;  // considerar "fresca" hasta 6h
+  // ---------- catálogo de monedas ----------
+  var CUR = {
+    BRL:  { code:"BRL",  name:"Real brasileño",           flag:"🇧🇷", decimals:2 },
+    CLP:  { code:"CLP",  name:"Peso chileno",              flag:"🇨🇱", decimals:0 },
+    USD:  { code:"USD",  name:"Dólar estadounidense",      flag:"🇺🇸", decimals:2 },
+    USDT: { code:"USDT", name:"Tether (USDT)",             flag:"₮",  decimals:2 }
+  };
+
+  function fetchWithTimeout(url, ms){
+    var ctrl = new AbortController();
+    var t = setTimeout(function(){ ctrl.abort(); }, ms);
+    return fetch(url, { signal: ctrl.signal, cache: "no-store" }).finally(function(){ clearTimeout(t); });
+  }
+  function getJSON(url, ms){
+    return fetchWithTimeout(url, ms || 5000).then(function(r){
+      if(!r.ok) throw new Error("bad status " + r.status);
+      return r.json();
+    });
+  }
+
+  // ---------- pares de conversión ----------
+  var PAIRS = [
+    {
+      id: "brl_clp", tabLabel: "BRL ⇄ CLP", from: CUR.BRL, to: CUR.CLP, freshMs: 6*60*60*1000,
+      fetchRate: function(){
+        return getJSON("https://open.er-api.com/v6/latest/BRL")
+          .then(function(j){ if(j && j.rates && typeof j.rates.CLP === "number") return j.rates.CLP; throw new Error("no CLP"); })
+          .catch(function(){
+            return getJSON("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/brl.json")
+              .then(function(j){ if(j && j.brl && typeof j.brl.clp === "number") return j.brl.clp; throw new Error("no clp"); });
+          })
+          .catch(function(){
+            return getJSON("https://latest.currency-api.pages.dev/v1/currencies/brl.json")
+              .then(function(j){ if(j && j.brl && typeof j.brl.clp === "number") return j.brl.clp; throw new Error("no clp"); });
+          });
+      }
+    },
+    {
+      id: "usd_clp", tabLabel: "USD ⇄ CLP", from: CUR.USD, to: CUR.CLP, freshMs: 6*60*60*1000,
+      fetchRate: function(){
+        return getJSON("https://open.er-api.com/v6/latest/USD")
+          .then(function(j){ if(j && j.rates && typeof j.rates.CLP === "number") return j.rates.CLP; throw new Error("no CLP"); })
+          .catch(function(){
+            return getJSON("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json")
+              .then(function(j){ if(j && j.usd && typeof j.usd.clp === "number") return j.usd.clp; throw new Error("no clp"); });
+          })
+          .catch(function(){
+            return getJSON("https://latest.currency-api.pages.dev/v1/currencies/usd.json")
+              .then(function(j){ if(j && j.usd && typeof j.usd.clp === "number") return j.usd.clp; throw new Error("no clp"); });
+          });
+      }
+    },
+    {
+      id: "usdt_usd", tabLabel: "USDT ⇄ USD", from: CUR.USDT, to: CUR.USD, freshMs: 15*60*1000,
+      fetchRate: function(){
+        // fuentes de mercado cripto: se actualizan en segundos/minutos, mucho más "en vivo" que el forex gratuito
+        return getJSON("https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd")
+          .then(function(j){ if(j && j.tether && typeof j.tether.usd === "number") return j.tether.usd; throw new Error("no usd"); })
+          .catch(function(){
+            return getJSON("https://api.coinbase.com/v2/prices/USDT-USD/spot")
+              .then(function(j){
+                var n = j && j.data && parseFloat(j.data.amount);
+                if(isFinite(n)) return n;
+                throw new Error("no amount");
+              });
+          })
+          .catch(function(){
+            return getJSON("https://min-api.cryptocompare.com/data/price?fsym=USDT&tsyms=USD")
+              .then(function(j){ if(j && typeof j.USD === "number") return j.USD; throw new Error("no USD"); });
+          });
+      }
+    }
+  ];
+
+  var LS_PAIR = "conv_last_pair_v2";
   var STALE_MS = 30 * 24 * 60 * 60 * 1000; // 30 días máx para seguir mostrando algo
 
-  var brlInput = document.getElementById("brl");
-  var clpInput = document.getElementById("clp");
-  var clearBRL = document.getElementById("clearBRL");
-  var clearCLP = document.getElementById("clearCLP");
+  var tabsEl = document.getElementById("tabs");
+  var amountFrom = document.getElementById("amountFrom");
+  var amountTo = document.getElementById("amountTo");
+  var clearFrom = document.getElementById("clearFrom");
+  var clearTo = document.getElementById("clearTo");
   var swapBtn = document.getElementById("swapBtn");
   var refreshBtn = document.getElementById("refreshBtn");
   var dot = document.getElementById("dot");
   var statusText = document.getElementById("statusText");
-  var fieldBRL = document.getElementById("fieldBRL");
-  var fieldCLP = document.getElementById("fieldCLP");
+  var fieldFrom = document.getElementById("fieldFrom");
+  var fieldTo = document.getElementById("fieldTo");
+  var flagFrom = document.getElementById("flagFrom"), codeFrom = document.getElementById("codeFrom"), nameFrom = document.getElementById("nameFrom");
+  var flagTo = document.getElementById("flagTo"), codeTo = document.getElementById("codeTo"), nameTo = document.getElementById("nameTo");
 
-  var state = { rate: null, ts: null, syncing: false, lastEdited: "brl" };
+  var pairIndex = 0;
+  var state = { rate: null, ts: null, syncing: false, lastEdited: "from" };
 
   // ---------- utils ----------
   function parseNum(str){
     if(!str) return NaN;
     var s = String(str).trim().replace(/\./g, "").replace(",", ".");
-    // if user typed with a dot as decimal (e.g. from a keyboard that only has ".")
     if (/^\d+\.\d{1,2}$/.test(String(str).trim()) && String(str).indexOf(",") === -1) {
       s = String(str).trim();
     }
-    var n = parseFloat(s);
-    return n;
+    return parseFloat(s);
   }
   function fmt(n, decimals){
     if(!isFinite(n)) return "";
     return n.toLocaleString("es-CL", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
   }
+  function pair(){ return PAIRS[pairIndex]; }
+  function lsKeyRate(){ return "conv_rate_" + pair().id + "_v1"; }
+  function lsKeyVals(){ return "conv_vals_" + pair().id + "_v1"; }
+
   function saveVals(){
-    try{ localStorage.setItem(LS_VALS, JSON.stringify({brl: brlInput.value, clp: clpInput.value})); }catch(e){}
+    try{ localStorage.setItem(lsKeyVals(), JSON.stringify({from: amountFrom.value, to: amountTo.value})); }catch(e){}
   }
   function loadVals(){
-    try{
-      var v = JSON.parse(localStorage.getItem(LS_VALS) || "null");
-      return v || null;
-    }catch(e){ return null; }
+    try{ return JSON.parse(localStorage.getItem(lsKeyVals()) || "null"); }catch(e){ return null; }
   }
   function saveRate(rate, ts){
-    try{ localStorage.setItem(LS_RATE, JSON.stringify({rate: rate, ts: ts})); }catch(e){}
+    try{ localStorage.setItem(lsKeyRate(), JSON.stringify({rate: rate, ts: ts})); }catch(e){}
   }
   function loadRate(){
-    try{ return JSON.parse(localStorage.getItem(LS_RATE) || "null"); }catch(e){ return null; }
+    try{ return JSON.parse(localStorage.getItem(lsKeyRate()) || "null"); }catch(e){ return null; }
   }
   function relTime(ts){
     var diff = Date.now() - ts;
@@ -190,96 +279,121 @@
   function recompute(source){
     if(!state.rate) return;
     state.syncing = true;
-    if(source === "brl"){
-      var b = parseNum(brlInput.value);
-      clpInput.value = isFinite(b) && brlInput.value !== "" ? fmt(b * state.rate, 0) : "";
+    var p = pair();
+    if(source === "from"){
+      var a = parseNum(amountFrom.value);
+      amountTo.value = isFinite(a) && amountFrom.value !== "" ? fmt(a * state.rate, p.to.decimals) : "";
     } else {
-      var c = parseNum(clpInput.value);
-      brlInput.value = isFinite(c) && clpInput.value !== "" ? fmt(c / state.rate, 2) : "";
+      var b = parseNum(amountTo.value);
+      amountFrom.value = isFinite(b) && amountTo.value !== "" ? fmt(b / state.rate, p.from.decimals) : "";
     }
     state.syncing = false;
-    clearBRL.hidden = !brlInput.value;
-    clearCLP.hidden = !clpInput.value;
+    clearFrom.hidden = !amountFrom.value;
+    clearTo.hidden = !amountTo.value;
     saveVals();
   }
 
-  brlInput.addEventListener("input", function(){
+  amountFrom.addEventListener("input", function(){
     if(state.syncing) return;
-    state.lastEdited = "brl";
-    recompute("brl");
+    state.lastEdited = "from";
+    recompute("from");
   });
-  clpInput.addEventListener("input", function(){
+  amountTo.addEventListener("input", function(){
     if(state.syncing) return;
-    state.lastEdited = "clp";
-    recompute("clp");
+    state.lastEdited = "to";
+    recompute("to");
   });
 
-  clearBRL.addEventListener("click", function(){ brlInput.value=""; clpInput.value=""; clearBRL.hidden=true; clearCLP.hidden=true; saveVals(); brlInput.focus(); });
-  clearCLP.addEventListener("click", function(){ brlInput.value=""; clpInput.value=""; clearBRL.hidden=true; clearCLP.hidden=true; saveVals(); clpInput.focus(); });
+  clearFrom.addEventListener("click", function(){ amountFrom.value=""; amountTo.value=""; clearFrom.hidden=true; clearTo.hidden=true; saveVals(); amountFrom.focus(); });
+  clearTo.addEventListener("click", function(){ amountFrom.value=""; amountTo.value=""; clearFrom.hidden=true; clearTo.hidden=true; saveVals(); amountTo.focus(); });
 
   swapBtn.addEventListener("click", function(){
     var main = document.querySelector("main");
-    if (fieldBRL.compareDocumentPosition(fieldCLP) & Node.DOCUMENT_POSITION_FOLLOWING) {
-      main.insertBefore(fieldCLP, fieldBRL);
+    if (fieldFrom.compareDocumentPosition(fieldTo) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      main.insertBefore(fieldTo, fieldFrom);
     } else {
-      main.insertBefore(fieldBRL, fieldCLP);
+      main.insertBefore(fieldFrom, fieldTo);
     }
-    (state.lastEdited === "brl" ? brlInput : clpInput).focus();
+    (state.lastEdited === "from" ? amountFrom : amountTo).focus();
   });
+
+  // ---------- tabs ----------
+  // Los botones se crean una sola vez (buildTabs); cambiar de pestaña solo
+  // alterna la clase "active", no reconstruye el DOM.
+  function buildTabs(){
+    tabsEl.innerHTML = "";
+    PAIRS.forEach(function(p, i){
+      var b = document.createElement("button");
+      b.className = "tab";
+      b.textContent = p.tabLabel;
+      b.addEventListener("click", function(){ if(i !== pairIndex) selectPair(i); });
+      tabsEl.appendChild(b);
+    });
+  }
+  function markActiveTab(){
+    var buttons = tabsEl.children;
+    for(var i=0; i<buttons.length; i++){
+      buttons[i].classList.toggle("active", i === pairIndex);
+    }
+  }
+
+  function renderFields(){
+    var p = pair();
+    flagFrom.textContent = p.from.flag; codeFrom.textContent = p.from.code; nameFrom.textContent = p.from.name;
+    flagTo.textContent = p.to.flag; codeTo.textContent = p.to.code; nameTo.textContent = p.to.name;
+    amountFrom.setAttribute("aria-label", "Monto en " + p.from.name);
+    amountTo.setAttribute("aria-label", "Monto en " + p.to.name);
+    // asegurar orden natural from/to tras un swap previo
+    var main = document.querySelector("main");
+    if (fieldFrom.compareDocumentPosition(fieldTo) & Node.DOCUMENT_POSITION_PRECEDING) {
+      main.insertBefore(fieldFrom, fieldTo);
+    }
+  }
+
+  function selectPair(i){
+    pairIndex = i;
+    try{ localStorage.setItem(LS_PAIR, String(i)); }catch(e){}
+    state.rate = null; state.ts = null; state.lastEdited = "from";
+    markActiveTab();
+    renderFields();
+
+    var cached = loadRate();
+    if(cached && cached.rate && (Date.now() - cached.ts) < STALE_MS){
+      state.rate = cached.rate; state.ts = cached.ts;
+    }
+    var vals = loadVals();
+    amountFrom.value = (vals && vals.from) || "";
+    amountTo.value = (vals && vals.to) || "";
+    clearFrom.hidden = !amountFrom.value;
+    clearTo.hidden = !amountTo.value;
+
+    updateStatus();
+    amountFrom.focus({preventScroll:true});
+    if(amountFrom.value) amountFrom.select();
+    refreshRate(false);
+  }
 
   // ---------- status UI ----------
   function updateStatus(){
+    var p = pair();
     if(!state.rate){
       dot.className = "dot off";
-      statusText.textContent = navigator.onLine ? "Sin datos de tasa todavía…" : "Sin conexión y sin datos guardados";
+      statusText.textContent = navigator.onLine ? "Cargando tasa…" : "Sin conexión y sin datos guardados";
       return;
     }
     var age = Date.now() - state.ts;
-    dot.className = "dot" + (age > FRESH_MS ? " stale" : "");
+    dot.className = "dot" + (age > p.freshMs ? " stale" : "");
     if (!navigator.onLine) dot.className = "dot off";
-    statusText.innerHTML = "1 BRL = <b>" + fmt(state.rate, 2) + "</b> CLP · " + relTime(state.ts) + (navigator.onLine ? "" : " · sin conexión");
+    statusText.innerHTML = "1 " + p.from.code + " = <b>" + fmt(state.rate, p.to.decimals === 0 ? 2 : p.to.decimals) + "</b> " + p.to.code + " · " + relTime(state.ts) + (navigator.onLine ? "" : " · sin conexión");
   }
   setInterval(updateStatus, 30000);
 
-  // ---------- fetching ----------
-  function fetchWithTimeout(url, ms){
-    var ctrl = new AbortController();
-    var t = setTimeout(function(){ ctrl.abort(); }, ms);
-    return fetch(url, { signal: ctrl.signal, cache: "no-store" }).finally(function(){ clearTimeout(t); });
-  }
-
-  function tryEndpoints(){
-    // 1) open.er-api.com — sin key, actualizado ~cada 24h
-    return fetchWithTimeout("https://open.er-api.com/v6/latest/BRL", 5000)
-      .then(function(r){ if(!r.ok) throw new Error("bad status"); return r.json(); })
-      .then(function(j){
-        if(j && j.rates && typeof j.rates.CLP === "number") return j.rates.CLP;
-        throw new Error("no CLP");
-      })
-      .catch(function(){
-        // 2) fawazahmed0/currency-api (jsDelivr), actualizado a diario
-        return fetchWithTimeout("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/brl.json", 5000)
-          .then(function(r){ if(!r.ok) throw new Error("bad status"); return r.json(); })
-          .then(function(j){
-            if(j && j.brl && typeof j.brl.clp === "number") return j.brl.clp;
-            throw new Error("no clp");
-          });
-      })
-      .catch(function(){
-        // 3) mismo dataset, mirror en pages.dev (por si jsDelivr falla)
-        return fetchWithTimeout("https://latest.currency-api.pages.dev/v1/currencies/brl.json", 5000)
-          .then(function(r){ if(!r.ok) throw new Error("bad status"); return r.json(); })
-          .then(function(j){
-            if(j && j.brl && typeof j.brl.clp === "number") return j.brl.clp;
-            throw new Error("no clp");
-          });
-      });
-  }
-
   function refreshRate(showSpin){
+    var p = pair();
     if(showSpin) refreshBtn.classList.add("spin");
-    return tryEndpoints()
+    return p.fetchRate()
       .then(function(rate){
+        if (pair().id !== p.id) return; // el usuario cambió de pestaña mientras cargaba
         var ts = Date.now();
         state.rate = rate;
         state.ts = ts;
@@ -287,13 +401,8 @@
         recompute(state.lastEdited);
         updateStatus();
       })
-      .catch(function(){
-        // se mantiene la tasa cacheada si existe; si no hay nada, avisamos
-        updateStatus();
-      })
-      .finally(function(){
-        if(showSpin) refreshBtn.classList.remove("spin");
-      });
+      .catch(function(){ updateStatus(); })
+      .finally(function(){ if(showSpin) refreshBtn.classList.remove("spin"); });
   }
 
   refreshBtn.addEventListener("click", function(){ refreshRate(true); });
@@ -302,23 +411,13 @@
 
   // ---------- boot ----------
   (function boot(){
-    var cached = loadRate();
-    if(cached && cached.rate && (Date.now() - cached.ts) < STALE_MS){
-      state.rate = cached.rate;
-      state.ts = cached.ts;
-    }
-    var vals = loadVals();
-    if(vals){
-      brlInput.value = vals.brl || "";
-      clpInput.value = vals.clp || "";
-      clearBRL.hidden = !brlInput.value;
-      clearCLP.hidden = !clpInput.value;
-    }
-    updateStatus();
-    brlInput.focus({preventScroll:true});
-    if(brlInput.value) brlInput.select();
-    // siempre intenta traer la tasa más fresca en background, sin bloquear la UI
-    refreshRate(false);
+    var savedIdx = 0;
+    try{
+      var raw = localStorage.getItem(LS_PAIR);
+      if(raw !== null){ var n = parseInt(raw, 10); if(n >= 0 && n < PAIRS.length) savedIdx = n; }
+    }catch(e){}
+    buildTabs();
+    selectPair(savedIdx);
   })();
 
   if("serviceWorker" in navigator){
