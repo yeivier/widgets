@@ -1,0 +1,16 @@
+{
+  "name": "BRL ⇄ CLP",
+  "short_name": "R$⇄$",
+  "description": "Conversor rápido de Reales brasileños a Pesos chilenos y viceversa",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "lang": "es",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icon.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
