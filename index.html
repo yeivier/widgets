@@ -114,8 +114,22 @@
     padding:7px 18px; flex:none; border-top:1px solid var(--line);
   }
   .totalBar[hidden]{display:none;}
+  .totalBar{flex-direction:column; gap:2px; padding:6px 18px;}
+  .totalRow{display:flex; align-items:center; justify-content:center; gap:10px; width:100%;}
   .totalText{font-size:13px; color:var(--muted); text-align:center;}
   .totalText b{color:var(--text); font-weight:700;}
+  .historyList{
+    list-style:none; margin:2px 0 0; padding:0; width:100%; max-height:88px; overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  .historyList li{
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    font-size:11.5px; color:var(--muted); padding:2px 0;
+  }
+  .historyList .sign{font-weight:700; width:12px; text-align:center; flex:none;}
+  .historyList .sign.pos{color:var(--accent);}
+  .historyList .sign.neg{color:var(--danger);}
+  body.kb-open .historyList{max-height:52px;}
   .totalText .arrow{color:var(--muted); margin:0 2px;}
   #resetTotalBtn{
     background:none; border:none; color:var(--muted); font-size:15px; padding:4px 6px;
@@ -171,8 +185,11 @@
   </main>
 
   <div class="totalBar" id="totalBar" hidden>
-    <span class="totalText" id="totalText"></span>
-    <button id="resetTotalBtn" aria-label="Reiniciar acumulado" title="Reiniciar acumulado">↺</button>
+    <div class="totalRow">
+      <span class="totalText" id="totalText"></span>
+      <button id="resetTotalBtn" aria-label="Reiniciar acumulado" title="Reiniciar acumulado">↺</button>
+    </div>
+    <ul class="historyList" id="historyList"></ul>
   </div>
 
   <footer>
@@ -282,8 +299,10 @@
   var flagFrom = document.getElementById("flagFrom"), codeFrom = document.getElementById("codeFrom"), nameFrom = document.getElementById("nameFrom");
   var flagTo = document.getElementById("flagTo"), codeTo = document.getElementById("codeTo"), nameTo = document.getElementById("nameTo");
 
+  var historyList = document.getElementById("historyList");
+
   var pairIndex = 0;
-  var state = { rate: null, ts: null, syncing: false, lastEdited: "from", totalFrom: 0, totalTo: 0 };
+  var state = { rate: null, ts: null, syncing: false, lastEdited: "from", history: [] };
 
   // ---------- utils ----------
   function parseNum(str){
@@ -315,11 +334,14 @@
   function loadRate(){
     try{ return JSON.parse(localStorage.getItem(lsKeyRate()) || "null"); }catch(e){ return null; }
   }
-  function saveTotal(){
-    try{ localStorage.setItem(lsKeyTotal(), JSON.stringify({from: state.totalFrom, to: state.totalTo})); }catch(e){}
+  function saveHistory(){
+    try{ localStorage.setItem(lsKeyTotal(), JSON.stringify(state.history)); }catch(e){}
   }
-  function loadTotal(){
-    try{ return JSON.parse(localStorage.getItem(lsKeyTotal()) || "null"); }catch(e){ return null; }
+  function loadHistory(){
+    try{
+      var v = JSON.parse(localStorage.getItem(lsKeyTotal()) || "null");
+      return Array.isArray(v) ? v : [];
+    }catch(e){ return []; }
   }
   function relTime(ts){
     var diff = Date.now() - ts;
@@ -350,29 +372,40 @@
     saveVals();
   }
 
-  // ---------- acumulado (sumar/restar conversiones) ----------
+  // ---------- acumulado (sumar/restar conversiones), con detalle ----------
   function renderTotal(){
     var p = pair();
-    var hasTotal = state.totalFrom !== 0 || state.totalTo !== 0;
-    totalBar.hidden = !hasTotal;
-    if(!hasTotal) return;
-    totalText.innerHTML = "Acumulado: <b>" + fmt(state.totalFrom, p.from.decimals) + "</b> " + p.from.code +
-      "<span class=\"arrow\">→</span><b>" + fmt(state.totalTo, p.to.decimals) + "</b> " + p.to.code;
+    var hasHistory = state.history.length > 0;
+    totalBar.hidden = !hasHistory;
+    if(!hasHistory){ historyList.innerHTML = ""; return; }
+
+    var totalFrom = 0, totalTo = 0;
+    var rows = state.history.map(function(e){
+      totalFrom += e.from; totalTo += e.to;
+      var pos = e.from >= 0;
+      return "<li><span class=\"sign " + (pos ? "pos\">+" : "neg\">−") + "</span>" +
+        fmt(Math.abs(e.from), p.from.decimals) + " " + p.from.code +
+        "<span class=\"arrow\">→</span>" + fmt(Math.abs(e.to), p.to.decimals) + " " + p.to.code + "</li>";
+    });
+
+    totalText.innerHTML = "Acumulado: <b>" + fmt(totalFrom, p.from.decimals) + "</b> " + p.from.code +
+      "<span class=\"arrow\">→</span><b>" + fmt(totalTo, p.to.decimals) + "</b> " + p.to.code;
+    historyList.innerHTML = rows.join("");
+    historyList.scrollTop = historyList.scrollHeight; // siempre a la vista lo último sumado
   }
   function tally(sign){
     var a = parseNum(amountFrom.value);
     var b = parseNum(amountTo.value);
     if(!isFinite(a) || !isFinite(b)) return; // nada que sumar/restar todavía
-    state.totalFrom += sign * a;
-    state.totalTo += sign * b;
-    saveTotal();
+    state.history.push({ from: sign * a, to: sign * b });
+    saveHistory();
     renderTotal();
   }
   addBtn.addEventListener("click", function(){ tally(1); });
   subBtn.addEventListener("click", function(){ tally(-1); });
   resetTotalBtn.addEventListener("click", function(){
-    state.totalFrom = 0; state.totalTo = 0;
-    saveTotal();
+    state.history = [];
+    saveHistory();
     renderTotal();
   });
 
@@ -452,9 +485,7 @@
     clearFrom.hidden = !amountFrom.value;
     clearTo.hidden = !amountTo.value;
 
-    var total = loadTotal();
-    state.totalFrom = (total && isFinite(total.from)) ? total.from : 0;
-    state.totalTo = (total && isFinite(total.to)) ? total.to : 0;
+    state.history = loadHistory();
     renderTotal();
 
     updateStatus();
