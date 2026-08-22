@@ -530,6 +530,15 @@
   window.addEventListener("online", function(){ refreshRate(false); updateStatus(); });
   window.addEventListener("offline", updateStatus);
 
+  // Auto-actualiza la tasa cada 1 minuto mientras la app está en primer
+  // plano, y también al volver a ella (cambiar de app y volver, desbloquear
+  // el celular, etc). Así siempre se muestra el dato más fresco disponible
+  // en la fuente, sin esperar a que el usuario toque el botón de refrescar.
+  setInterval(function(){ if(!document.hidden) refreshRate(false); }, 60000);
+  document.addEventListener("visibilitychange", function(){
+    if(!document.hidden) refreshRate(false);
+  });
+
   // ---------- boot ----------
   (function boot(){
     var savedIdx = 0;
