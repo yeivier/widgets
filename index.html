@@ -223,11 +223,31 @@
     });
   }
 
+  // Cotización de mercado real (la misma clase de dato que muestra el
+  // conversor de Google al buscar) vía Yahoo Finance. No hay API pública de
+  // Google Finance ni forma de usar Yahoo directo desde el navegador (CORS),
+  // así que se pasa por un proxy público sin necesidad de registrarse en
+  // nada. Si el proxy falla, se cae a las fuentes diarias de siempre.
+  function yahooRate(symbol){
+    var target = "https://query1.finance.yahoo.com/v8/finance/chart/" + symbol;
+    function parse(j){
+      var p = j && j.chart && j.chart.result && j.chart.result[0] && j.chart.result[0].meta && j.chart.result[0].meta.regularMarketPrice;
+      if(typeof p === "number") return p;
+      throw new Error("no regularMarketPrice");
+    }
+    return getJSON("https://corsproxy.io/?url=" + encodeURIComponent(target), 4000)
+      .then(parse)
+      .catch(function(){
+        return getJSON("https://api.allorigins.win/raw?url=" + encodeURIComponent(target), 4000).then(parse);
+      });
+  }
+
   // ---------- pares de conversión ----------
   var PAIRS = [
     {
-      id: "brl_clp", tabLabel: "BRL ⇄ CLP", from: CUR.BRL, to: CUR.CLP, freshMs: 6*60*60*1000,
+      id: "brl_clp", tabLabel: "BRL ⇄ CLP", from: CUR.BRL, to: CUR.CLP, freshMs: 5*60*1000,
       fetchRate: function(){
+        return yahooRate("BRLCLP=X").catch(function(){
         return getJSON("https://open.er-api.com/v6/latest/BRL")
           .then(function(j){ if(j && j.rates && typeof j.rates.CLP === "number") return j.rates.CLP; throw new Error("no CLP"); })
           .catch(function(){
@@ -238,11 +258,13 @@
             return getJSON("https://latest.currency-api.pages.dev/v1/currencies/brl.json")
               .then(function(j){ if(j && j.brl && typeof j.brl.clp === "number") return j.brl.clp; throw new Error("no clp"); });
           });
+        });
       }
     },
     {
-      id: "usd_clp", tabLabel: "USD ⇄ CLP", from: CUR.USD, to: CUR.CLP, freshMs: 6*60*60*1000,
+      id: "usd_clp", tabLabel: "USD ⇄ CLP", from: CUR.USD, to: CUR.CLP, freshMs: 5*60*1000,
       fetchRate: function(){
+        return yahooRate("USDCLP=X").catch(function(){
         return getJSON("https://open.er-api.com/v6/latest/USD")
           .then(function(j){ if(j && j.rates && typeof j.rates.CLP === "number") return j.rates.CLP; throw new Error("no CLP"); })
           .catch(function(){
@@ -253,6 +275,7 @@
             return getJSON("https://latest.currency-api.pages.dev/v1/currencies/usd.json")
               .then(function(j){ if(j && j.usd && typeof j.usd.clp === "number") return j.usd.clp; throw new Error("no clp"); });
           });
+        });
       }
     },
     {
