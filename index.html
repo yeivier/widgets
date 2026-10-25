@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Conversor CLP</title>
-<meta name="description" content="Conversor rápido de Reales, Dólares y USDT a Pesos chilenos y viceversa, con tasas en vivo.">
+<meta name="description" content="Conversor rápido de Pesos dominicanos, Reales, Dólares y USDT a Pesos chilenos y viceversa, con tasas en vivo.">
 <meta name="theme-color" content="#0b1220">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -208,7 +208,8 @@
     BRL:  { code:"BRL",  name:"Real brasileño",           flag:"🇧🇷", decimals:2 },
     CLP:  { code:"CLP",  name:"Peso chileno",              flag:"🇨🇱", decimals:0 },
     USD:  { code:"USD",  name:"Dólar estadounidense",      flag:"🇺🇸", decimals:2 },
-    USDT: { code:"USDT", name:"Tether (USDT)",             flag:"₮",  decimals:2 }
+    USDT: { code:"USDT", name:"Tether (USDT)",             flag:"₮",  decimals:2 },
+    DOP:  { code:"DOP",  name:"Peso dominicano",           flag:"🇩🇴", decimals:2 }
   };
 
   function fetchWithTimeout(url, ms){
@@ -244,6 +245,43 @@
 
   // ---------- pares de conversión ----------
   var PAIRS = [
+    {
+      id: "dop_clp", tabLabel: "DOP ⇄ CLP", from: CUR.DOP, to: CUR.CLP, freshMs: 5*60*1000,
+      fetchRate: function(){
+        // cruce en vivo: cuántos CLP vale 1 USD, dividido por cuántos DOP vale 1 USD
+        return Promise.all([ yahooRate("USDCLP=X"), yahooRate("USDDOP=X") ])
+          .then(function(r){ return r[0] / r[1]; })
+          .catch(function(){
+            return getJSON("https://open.er-api.com/v6/latest/DOP")
+              .then(function(j){ if(j && j.rates && typeof j.rates.CLP === "number") return j.rates.CLP; throw new Error("no CLP"); })
+              .catch(function(){
+                return getJSON("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/dop.json")
+                  .then(function(j){ if(j && j.dop && typeof j.dop.clp === "number") return j.dop.clp; throw new Error("no clp"); });
+              })
+              .catch(function(){
+                return getJSON("https://latest.currency-api.pages.dev/v1/currencies/dop.json")
+                  .then(function(j){ if(j && j.dop && typeof j.dop.clp === "number") return j.dop.clp; throw new Error("no clp"); });
+              });
+          });
+      }
+    },
+    {
+      id: "dop_usd", tabLabel: "DOP ⇄ USD", from: CUR.DOP, to: CUR.USD, freshMs: 5*60*1000,
+      fetchRate: function(){
+        return yahooRate("USDDOP=X").then(function(usdInDop){ return 1 / usdInDop; }).catch(function(){
+          return getJSON("https://open.er-api.com/v6/latest/DOP")
+            .then(function(j){ if(j && j.rates && typeof j.rates.USD === "number") return j.rates.USD; throw new Error("no USD"); })
+            .catch(function(){
+              return getJSON("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/dop.json")
+                .then(function(j){ if(j && j.dop && typeof j.dop.usd === "number") return j.dop.usd; throw new Error("no usd"); });
+            })
+            .catch(function(){
+              return getJSON("https://latest.currency-api.pages.dev/v1/currencies/dop.json")
+                .then(function(j){ if(j && j.dop && typeof j.dop.usd === "number") return j.dop.usd; throw new Error("no usd"); });
+            });
+        });
+      }
+    },
     {
       id: "brl_clp", tabLabel: "BRL ⇄ CLP", from: CUR.BRL, to: CUR.CLP, freshMs: 5*60*1000,
       fetchRate: function(){
@@ -300,7 +338,7 @@
     }
   ];
 
-  var LS_PAIR = "conv_last_pair_v2";
+  var LS_PAIR = "conv_last_pair_v3";
   var STALE_MS = 30 * 24 * 60 * 60 * 1000; // 30 días máx para seguir mostrando algo
 
   var tabsEl = document.getElementById("tabs");

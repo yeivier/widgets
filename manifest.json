@@ -1,7 +1,7 @@
 {
   "name": "Conversor CLP",
   "short_name": "Conv $",
-  "description": "Conversor rápido de Reales, Dólares y USDT a Pesos chilenos y viceversa",
+  "description": "Conversor rápido de Pesos dominicanos, Reales, Dólares y USDT a Pesos chilenos y viceversa",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
